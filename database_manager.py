@@ -177,3 +177,43 @@ class DatabaseManager:
         cursor.close()
         self._disconnect()
         return rows_affected
+    
+    def get_daily_report(self, report_date, search_term=""):
+        """
+        Fetches a full daily report for a specific date, including absent students.
+        Can be filtered by a search term for student ID or name.
+        """
+        conn = self._connect()
+        if not conn: return []
+        cursor = conn.cursor(dictionary=True)
+
+        # The COALESCE function is used to show 'Absent' if a log entry doesn't exist for a student on that day.
+        # The LEFT JOIN ensures all students are included, regardless of whether they have an attendance log.
+        query = """
+            SELECT
+                s.student_id,
+                s.name,
+                s.major,
+                s.section,
+                l.entry_time,
+                l.exit_time,
+                COALESCE(l.status, 'Absent') as status
+            FROM
+                students s
+            LEFT JOIN
+                attendance_logs l ON s.student_id = l.student_id AND l.date = %s
+            WHERE
+                (s.student_id LIKE %s OR s.name LIKE %s)
+            ORDER BY
+                s.name;
+        """
+        
+        # The '%' signs are for a "wildcard" search
+        search_pattern = f"%{search_term}%"
+        params = (report_date, search_pattern, search_pattern)
+
+        cursor.execute(query, params)
+        report_data = cursor.fetchall()
+        cursor.close()
+        self._disconnect()
+        return report_data
