@@ -72,11 +72,17 @@ class DatabaseManager:
         cursor = conn.cursor(dictionary=True)
         # This query joins the students and images tables to get all necessary info
         query = """
-        SELECT s.student_id, s.name, s.major, s.year, s.section, i.image_path 
+        SELECT 
+            s.student_id, 
+            ANY_VALUE(s.name) as name, 
+            ANY_VALUE(s.major) as major, 
+            ANY_VALUE(s.year) as year, 
+            ANY_VALUE(s.section) as section, 
+            ANY_VALUE(i.image_path) as image_path 
         FROM students s 
         LEFT JOIN student_images i ON s.student_id = i.student_id
         GROUP BY s.student_id
-        ORDER BY s.name
+        ORDER BY ANY_VALUE(s.name)
         """
         cursor.execute(query)
         students = cursor.fetchall()
