@@ -4,6 +4,9 @@ import customtkinter as ctk
 import os
 import shutil
 from database_manager import DatabaseManager
+from face_encoder import generate_encodings
+from attendance_system import AttendanceSystem
+import threading
 
 # --- GUI Setup ---
 ctk.set_appearance_mode("System")
@@ -117,8 +120,27 @@ class App(ctk.CTk):
 
     def create_dashboard_frame(self):
         frame = ctk.CTkFrame(self, corner_radius=0, fg_color="transparent")
+        
         ctk.CTkLabel(frame, text="System Dashboard", font=("Arial", 20, "bold")).pack(pady=20)
-        # We will fill this frame with more widgets later
+
+        # Launch controls
+        launch_frame = ctk.CTkFrame(frame)
+        launch_frame.pack(pady=10, padx=20, fill="x")
+        ctk.CTkLabel(launch_frame, text="Real-Time Attendance", font=("Arial", 16)).pack(pady=5)
+        
+        self.mode_var = ctk.StringVar(value="entry")
+        ctk.CTkRadioButton(launch_frame, text="Entry", variable=self.mode_var, value="entry").pack(side="left", padx=20, pady=10)
+        ctk.CTkRadioButton(launch_frame, text="Exit", variable=self.mode_var, value="exit").pack(side="left", padx=20, pady=10)
+        ctk.CTkButton(launch_frame, text="Start Camera", command=self.start_attendance).pack(side="right", padx=20, pady=10)
+
+        # System management controls
+        manage_frame = ctk.CTkFrame(frame)
+        manage_frame.pack(pady=10, padx=20, fill="x")
+        ctk.CTkLabel(manage_frame, text="System Management", font=("Arial", 16)).pack(pady=5)
+
+        ctk.CTkButton(manage_frame, text="Generate Face Encodings", command=self.run_encoding).pack(pady=10, fill="x")
+        ctk.CTkButton(manage_frame, text="Daily Attendance Reset", command=self.run_daily_reset).pack(pady=10, fill="x")
+        
         return frame
 
     def create_manage_student_frame(self):
@@ -159,6 +181,37 @@ class App(ctk.CTk):
             
     def open_add_student_window(self):
         AddStudentWindow(self)
+
+    def start_attendance(self):
+        mode = self.mode_var.get()
+        if not os.path.exists('EncodeFile.p'):
+            messagebox.showerror("Error", "EncodeFile.p not found. Please add students and generate encodings first.")
+            return
+
+        def run_system():
+            attendance_app = AttendanceSystem(mode=mode)
+            attendance_app.run()
+
+        # Run in a separate thread to prevent the GUI from freezing
+        attendance_thread = threading.Thread(target=run_system)
+        attendance_thread.daemon = True
+        attendance_thread.start()
+        messagebox.showinfo("Info", f"Camera starting in '{mode}' mode. Press 'ESC' in the camera window to close.", parent=self)
+
+    def run_encoding(self):
+        if messagebox.askyesno("Confirm", "This will encode all images in the 'Images' folder. This may take a while. Continue?"):
+            success = generate_encodings()
+            if success:
+                messagebox.showinfo("Success", "Face encodings generated successfully.")
+            else:
+                messagebox.showwarning("Warning", "Encoding process completed, but no images were found or no faces could be encoded.")
+
+    def run_daily_reset(self):
+        if messagebox.askyesno("Confirm", "Are you sure you want to reset the daily status for all students to 'Absent'?"):
+            rows = self.db_manager.daily_reset()
+            messagebox.showinfo("Success", f"Daily status has been reset for {rows} students.")
+
+    
 
 
 if __name__ == "__main__":

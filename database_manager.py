@@ -115,3 +115,64 @@ class DatabaseManager:
         finally:
             cursor.close()
             self._disconnect()
+        
+    def get_student_info(self, student_id):
+        """Fetches all info for a single student."""
+        conn = self._connect()
+        if not conn: return None
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM students WHERE student_id = %s", (student_id,))
+        student_info = cursor.fetchone()
+        cursor.close()
+        self._disconnect()
+        return student_info
+
+    def log_attendance(self, student_id, mode):
+        """Logs an entry or exit event and updates the student's status."""
+        conn = self._connect()
+        if not conn: return "DB Error", None
+        cursor = conn.cursor(dictionary=True)
+        
+        current_time = datetime.now()
+        today = current_time.date()
+        
+        # Get the student's last entry time
+        cursor.execute("SELECT last_entry_time, daily_status FROM students WHERE student_id = %s", (student_id,))
+        record = cursor.fetchone()
+        
+        if mode == "entry":
+            # Cooldown: Prevent marking entry again within 30 minutes
+            if record and current_time - record['last_entry_time'] < timedelta(minutes=30):
+                 return "Cooldown", self.get_student_info(student_id)
+            
+            # Update student record for entry
+            cursor.execute("UPDATE students SET total_present = total_present + 1, last_entry_time = %s, daily_status = 'Present' WHERE student_id = %s", (current_time, student_id))
+            # Log the event
+            cursor.execute("INSERT INTO attendance_logs (student_id, date, entry_time, status) VALUES (%s, %s, %s, 'Present')", (student_id, today, current_time))
+
+        elif mode == "exit":
+            if not record or record['daily_status'] != 'Present':
+                return "Not Present", self.get_student_info(student_id)
+            
+            # Log the exit time in the most recent log for that day
+            cursor.execute("UPDATE attendance_logs SET exit_time = %s WHERE student_id = %s AND date = %s ORDER BY id DESC LIMIT 1", (current_time, student_id, today))
+            # Update daily status to reflect exit, but keep total_present the same
+            cursor.execute("UPDATE students SET daily_status = 'Exited' WHERE student_id = %s", (student_id,))
+
+        conn.commit()
+        updated_info = self.get_student_info(student_id)
+        cursor.close()
+        self._disconnect()
+        return "Success", updated_info
+
+    def daily_reset(self):
+        """Resets the daily_status for all students to 'Absent'."""
+        conn = self._connect()
+        if not conn: return 0
+        cursor = conn.cursor()
+        cursor.execute("UPDATE students SET daily_status = 'Absent'")
+        rows_affected = cursor.rowcount
+        conn.commit()
+        cursor.close()
+        self._disconnect()
+        return rows_affected
