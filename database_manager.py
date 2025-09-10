@@ -64,3 +64,48 @@ class DatabaseManager:
         conn.commit()
         cursor.close()
         self._disconnect()
+
+    def get_all_students(self):
+        """Fetches all students and their primary image path."""
+        conn = self._connect()
+        if not conn: return []
+        cursor = conn.cursor(dictionary=True)
+        # This query joins the students and images tables to get all necessary info
+        query = """
+        SELECT s.student_id, s.name, s.major, s.year, s.section, i.image_path 
+        FROM students s 
+        LEFT JOIN student_images i ON s.student_id = i.student_id
+        GROUP BY s.student_id
+        ORDER BY s.name
+        """
+        cursor.execute(query)
+        students = cursor.fetchall()
+        cursor.close()
+        self._disconnect()
+        return students
+
+    def add_student(self, student_id, name, major, year, section, image_path):
+        """Adds a new student and their image to the database."""
+        conn = self._connect()
+        if not conn: return False
+        cursor = conn.cursor()
+        try:
+            # Add student details to the 'students' table
+            cursor.execute(
+                "INSERT INTO students (student_id, name, major, year, section) VALUES (%s, %s, %s, %s, %s)",
+                (student_id, name, major, year, section)
+            )
+            # Add the image path to the 'student_images' table
+            cursor.execute(
+                "INSERT INTO student_images (student_id, image_path) VALUES (%s, %s)",
+                (student_id, image_path)
+            )
+            conn.commit()
+            return True
+        except mysql.connector.Error as err:
+            print(f"Database error: {err}")
+            conn.rollback() # Rollback changes if an error occurs
+            return False
+        finally:
+            cursor.close()
+            self._disconnect()
