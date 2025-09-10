@@ -2,6 +2,7 @@ import mysql.connector
 from datetime import datetime
 import configparser
 from datetime import timedelta
+import os
 
 class DatabaseManager:
     """Handles all interactions with the MySQL database."""
@@ -217,3 +218,59 @@ class DatabaseManager:
         cursor.close()
         self._disconnect()
         return report_data
+    
+    def update_student(self, original_student_id, new_details):
+        """Updates a student's details in the database."""
+        conn = self._connect()
+        if not conn: return False
+        cursor = conn.cursor()
+        try:
+            # Update students table
+            update_student_query = """
+                UPDATE students SET student_id=%s, name=%s, major=%s, year=%s, section=%s 
+                WHERE student_id=%s
+            """
+            cursor.execute(update_student_query, (
+                new_details['student_id'], new_details['name'], new_details['major'],
+                new_details['year'], new_details['section'], original_student_id
+            ))
+            
+            # If a new image path is provided, update it
+            if new_details.get('image_path'):
+                update_image_query = "UPDATE student_images SET image_path=%s WHERE student_id=%s"
+                cursor.execute(update_image_query, (new_details['image_path'], new_details['student_id']))
+
+            conn.commit()
+            return True
+        except mysql.connector.Error as err:
+            print(f"Database error during update: {err}")
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            self._disconnect()
+
+    def delete_student(self, student_id):
+        """Deletes a student from the database and their image file."""
+        # First, delete the image file to prevent orphaned files
+        students = self.get_all_students()
+        student_to_delete = next((s for s in students if s['student_id'] == student_id), None)
+        if student_to_delete and student_to_delete.get('image_path'):
+            if os.path.exists(student_to_delete['image_path']):
+                os.remove(student_to_delete['image_path'])
+
+        # Now, delete from the database (ON DELETE CASCADE will handle child tables)
+        conn = self._connect()
+        if not conn: return False
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM students WHERE student_id = %s", (student_id,))
+            conn.commit()
+            return True
+        except mysql.connector.Error as err:
+            print(f"Database error during delete: {err}")
+            conn.rollback()
+            return False
+        finally:
+            cursor.close()
+            self._disconnect()
