@@ -1,0 +1,15 @@
+# Virtual Environment
+venv/
+__pycache__/
+
+# Compiled Python files
+*.pyc
+
+# Data files
+*.p
+*.sqlite3
+
+# IDE and OS files
+.idea/
+.vscode/
+*.DS_Store
