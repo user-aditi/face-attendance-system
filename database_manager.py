@@ -1,6 +1,7 @@
 import mysql.connector
 from datetime import datetime
 import configparser
+from datetime import timedelta
 
 class DatabaseManager:
     """Handles all interactions with the MySQL database."""
